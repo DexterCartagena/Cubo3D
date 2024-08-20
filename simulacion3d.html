@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación 3D de bolas rebotando</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #ff69b4;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="ballCount">Número de bolas: <span id="ballCountValue">5</span></label>
+        <input type="range" id="ballCount" min="1" max="20" value="5">
+        <br>
+        <label for="gravity">Gravedad: <span id="gravityValue">9.8</span></label>
+        <input type="range" id="gravity" min="0" max="20" step="0.1" value="9.8">
+        <br>
+        <label for="cubeSize">Tamaño del cubo: <span id="cubeSizeValue">10</span></label>
+        <input type="range" id="cubeSize" min="5" max="20" step="0.1" value="10">
+        <br>
+        <button id="bounce">Rebotar</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, cube;
+        let balls = [];
+        let gravity = 9.8;
+        let cubeSize = 10;
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000);
+            document.body.appendChild(renderer.domElement);
+
+            // Crear el cubo contenedor
+            const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+            const cubeMaterial = new THREE.MeshPhongMaterial({
+                color: 0x00ff00,
+                opacity: 0.2,
+                transparent: true,
+                wireframe: true
+            });
+            cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            scene.add(cube);
+
+            // Agregar luces
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            camera.position.set(15, 15, 15);
+            camera.lookAt(scene.position);
+
+            createBalls(5);
+
+            // Eventos de control
+            document.getElementById('ballCount').addEventListener('input', updateBallCount);
+            document.getElementById('gravity').addEventListener('input', updateGravity);
+            document.getElementById('cubeSize').addEventListener('input', updateCubeSize);
+            document.getElementById('bounce').addEventListener('click', bounceBalls);
+
+            // Eventos de mouse para control de cámara
+            renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+            renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            renderer.domElement.addEventListener('wheel', onMouseWheel, false);
+
+            animate();
+        }
+
+        function onMouseDown(event) {
+            isMouseDown = true;
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        }
+
+        function onMouseUp() {
+            isMouseDown = false;
+        }
+
+        function onMouseMove(event) {
+            if (isMouseDown) {
+                const deltaX = event.clientX - mouseX;
+                const deltaY = event.clientY - mouseY;
+
+                camera.position.x = camera.position.x * Math.cos(deltaX * 0.01) + camera.position.z * Math.sin(deltaX * 0.01);
+                camera.position.z = camera.position.z * Math.cos(deltaX * 0.01) - camera.position.x * Math.sin(deltaX * 0.01);
+
+                camera.position.y += deltaY * 0.05;
+
+                camera.lookAt(scene.position);
+
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+            }
+        }
+
+        function onMouseWheel(event) {
+            const zoomSpeed = 0.1;
+            camera.position.multiplyScalar(1 + event.deltaY * zoomSpeed * 0.001);
+            camera.lookAt(scene.position);
+        }
+
+        function createBalls(count) {
+            // Eliminar bolas existentes
+            balls.forEach(ball => scene.remove(ball));
+            balls = [];
+
+            for (let i = 0; i < count; i++) {
+                const ballGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+                const ballMaterial = new THREE.MeshPhongMaterial({color: getRandomNeonColor()});
+                const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+                ball.position.set(
+                    Math.random() * cubeSize - cubeSize/2,
+                    Math.random() * cubeSize - cubeSize/2,
+                    Math.random() * cubeSize - cubeSize/2
+                );
+                ball.velocity = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize().multiplyScalar(0.1);
+                scene.add(ball);
+                balls.push(ball);
+            }
+        }
+
+        function getRandomNeonColor() {
+            const neonColors = [0xFF6EC7, 0xFF00FF, 0x00FFFF, 0x00FF00, 0xFFFF00, 0xFF9933];
+            return neonColors[Math.floor(Math.random() * neonColors.length)];
+        }
+
+        function updateBallCount() {
+            const count = parseInt(this.value);
+            document.getElementById('ballCountValue').textContent = count;
+            createBalls(count);
+        }
+
+        function updateGravity() {
+            gravity = parseFloat(this.value);
+            document.getElementById('gravityValue').textContent = gravity.toFixed(1);
+        }
+
+        function updateCubeSize() {
+            cubeSize = parseFloat(this.value);
+            document.getElementById('cubeSizeValue').textContent = cubeSize.toFixed(1);
+            scene.remove(cube);
+            const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+            const cubeMaterial = new THREE.MeshPhongMaterial({
+                color: 0x00ff00,
+                opacity: 0.2,
+                transparent: true,
+                wireframe: true
+            });
+            cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            scene.add(cube);
+        }
+
+        function bounceBalls() {
+            balls.forEach(ball => {
+                ball.velocity = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize().multiplyScalar(0.1);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            balls.forEach(ball => {
+                ball.velocity.y -= gravity * 0.0001;
+
+                ball.position.add(ball.velocity);
+
+                // Colisiones con las paredes del cubo
+                if (Math.abs(ball.position.x) > cubeSize/2 - 0.2) {
+                    ball.position.x = Math.sign(ball.position.x) * (cubeSize/2 - 0.2);
+                    ball.velocity.x *= -0.8;
+                }
+                if (Math.abs(ball.position.y) > cubeSize/2 - 0.2) {
+                    ball.position.y = Math.sign(ball.position.y) * (cubeSize/2 - 0.2);
+                    ball.velocity.y *= -0.8;
+                    if (ball.position.y < 0) {
+                        ball.velocity.x *= 0.99; // Fricción con el suelo
+                        ball.velocity.z *= 0.99;
+                    }
+                }
+                if (Math.abs(ball.position.z) > cubeSize/2 - 0.2) {
+                    ball.position.z = Math.sign(ball.position.z) * (cubeSize/2 - 0.2);
+                    ball.velocity.z *= -0.8;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+
+        init();
+    </script>
+</body>
+</html>
